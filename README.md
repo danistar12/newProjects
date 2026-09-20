@@ -1,1 +1,1 @@
-School projects for summer school 24
+This is a school project forum. Current Study flow
