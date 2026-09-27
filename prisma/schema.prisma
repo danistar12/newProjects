@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               String            @id @default(uuid())
+  name             String?
+  email            String            @unique
+  passwordHash     String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  classes          Class[]
+  calendarEvents   CalendarEvent[]
+  studySessions    StudySession[]
+  quizAttempts     QuizAttempt[]
+}
+
+model Class {
+  id          String       @id @default(uuid())
+  userId      String
+  name        String
+  color       String
+  instructor  String?
+  room        String?
+  credits     Int?
+  createdAt   DateTime     @default(now())
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+  studySessions StudySession[]
+  quizAttempts QuizAttempt[]
+}
+
+model Assignment {
+  id          String   @id @default(uuid())
+  classId     String
+  title       String
+  assignmentType String  @default("Other")
+  description String?
+  dueDate     DateTime
+  isCompleted Boolean  @default(false)
+  grade       String?
+  createdAt   DateTime @default(now())
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  calendarEvent CalendarEvent?
+}
+
+model CalendarEvent {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  type        String
+  color       String?
+  assignmentId String? @unique
+  studySessionId String? @unique
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studySession StudySession? @relation(fields: [studySessionId], references: [id], onDelete: Cascade)
+}
+
+model StudySession {
+  id               String   @id @default(uuid())
+  userId           String
+  classId          String?
+  title            String
+  topic            String
+  studyType        String   @default("Focus Session")
+  scheduledDate    DateTime
+  durationMinutes  Int
+  isCompleted      Boolean  @default(false)
+  notes            String?
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class            Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+  calendarEvent    CalendarEvent?
+}
+
+// Tracks per-question mastery for Quiz Me sessions so future generations can
+// avoid repeating mastered questions and revisit ones the student got wrong.
+model QuizAttempt {
+  id             String   @id @default(uuid())
+  userId         String
+  classId        String?
+  topic          String
+  question       String
+  questionHash   String
+  timesCorrect   Int      @default(0)
+  timesIncorrect Int      @default(0)
+  lastResult     Boolean
+  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class          Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, classId, topic, questionHash])
+}
