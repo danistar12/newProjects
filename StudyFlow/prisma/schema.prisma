@@ -16,6 +16,7 @@ model User {
   classes          Class[]
   calendarEvents   CalendarEvent[]
   studySessions    StudySession[]
+  quizAttempts     QuizAttempt[]
 }
 
 model Class {
@@ -30,6 +31,7 @@ model Class {
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignments Assignment[]
   studySessions StudySession[]
+  quizAttempts QuizAttempt[]
 }
 
 model Assignment {
@@ -78,4 +80,24 @@ model StudySession {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   class            Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
   calendarEvent    CalendarEvent?
+}
+
+// Tracks per-question mastery for Quiz Me sessions so future generations can
+// avoid repeating mastered questions and revisit ones the student got wrong.
+model QuizAttempt {
+  id             String   @id @default(uuid())
+  userId         String
+  classId        String?
+  topic          String
+  question       String
+  questionHash   String
+  timesCorrect   Int      @default(0)
+  timesIncorrect Int      @default(0)
+  lastResult     Boolean
+  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class          Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, classId, topic, questionHash])
 }

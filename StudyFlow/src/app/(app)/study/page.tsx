@@ -3,10 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { addDays, endOfWeek, format, isBefore, isWithinInterval, parseISO, startOfDay, startOfWeek, subDays } from "date-fns";
 import { Brain, Check, Clock3, Edit3, History, Pause, Play, Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
 
 import Button from "@/components/ui/button";
@@ -20,6 +21,7 @@ type StudyType = "Practice Problems" | "Definitions" | "Flashcards" | "Study Gui
 interface StudySession { id: string; title: string; topic: string; studyType?: string; scheduledDate: string; durationMinutes: number; notes: string | null; isCompleted: boolean; classId: string | null; class: { id: string; name: string; color: string } | null }
 interface ClassOption { id: string; name: string; color: string }
 interface TimerState { isRunning: boolean; secondsRemaining: number; sessionTitle: string; startTimestamp: number | null; sessionId: string | null }
+interface QuizQuestion { question: string; answer: string; explanation: string }
 type GeneratedContent = string;
 
 const storageKey = "studyflow-focus-timer";
@@ -76,6 +78,7 @@ export default function StudyPage() {
   const [selectedStudyType, setSelectedStudyType] = useState<StudyType>("Flashcards");
   const [topicInput, setTopicInput] = useState("");
   const [generated, setGenerated] = useState<GeneratedContent | null>(null);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [aiSessionStartedAt, setAiSessionStartedAt] = useState<number | null>(null);
 
@@ -126,7 +129,8 @@ export default function StudyPage() {
       setTimer((current) => {
         if (current.secondsRemaining <= 1) {
           window.clearInterval(interval);
-          finishTimer();
+          // Defer to a macrotask: calling this here would update another component's state during render.
+          window.setTimeout(() => finishTimer(), 0);
           return { ...current, secondsRemaining: 0, isRunning: false, startTimestamp: null };
         }
         return { ...current, secondsRemaining: current.secondsRemaining - 1 };
@@ -220,10 +224,16 @@ export default function StudyPage() {
     }
     setGenerating(true);
     try {
-      const response = await fetch("/api/study/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ className: selectedClass.name, studyType: selectedStudyType, topic: topicInput.trim() }) });
+      const response = await fetch("/api/study/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ className: selectedClass.name, studyType: selectedStudyType, topic: topicInput.trim(), classId: selectedClass.id }) });
       if (!response.ok) throw new Error("Unable to generate the study session.");
       const result = await response.json();
-      setGenerated(result.content);
+      if (selectedStudyType === "Quiz Me") {
+        setQuizQuestions(result.questions ?? []);
+        setGenerated(null);
+      } else {
+        setGenerated(result.content);
+        setQuizQuestions(null);
+      }
       if (!isRegenerate) {
         const startedAt = Date.now();
         setAiSessionStartedAt(startedAt);
@@ -294,7 +304,7 @@ export default function StudyPage() {
         <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.35fr)_minmax(0,1fr)] lg:items-start">
           <div>
             <label htmlFor="study-class" className="mb-2 block text-sm font-semibold text-slate-800">What class are you studying?</label>
-            <select id="study-class" value={selectedClassId} onChange={(event) => { setSelectedClassId(event.target.value); setGenerated(null); }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
+            <select id="study-class" value={selectedClassId} onChange={(event) => { setSelectedClassId(event.target.value); setGenerated(null); setQuizQuestions(null); }} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-medium text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100">
               <option value="">Select a class</option>
               {classes.map((classRecord) => <option key={classRecord.id} value={classRecord.id}>{classRecord.name}</option>)}
             </select>
@@ -314,6 +324,15 @@ export default function StudyPage() {
       </section>
 
       {generated ? <GeneratedStudyPanel content={generated} regenerating={generating} onRegenerate={regenerateStudySet} /> : null}
+      {quizQuestions ? (
+        <QuizPanel
+          questions={quizQuestions}
+          regenerating={generating}
+          onRegenerate={regenerateStudySet}
+          classId={selectedClassId || null}
+          topic={topicInput.trim()}
+        />
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(360px,0.8fr)_minmax(0,1.2fr)]">
         <section className="rounded-2xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 p-6 text-white shadow-lg"><div className="flex items-center gap-2 text-sm font-semibold text-indigo-100"><Brain className="h-4 w-4" /> Focus Timer</div><div className="relative mx-auto mt-6 h-72 w-72 max-w-full"><svg className="h-full w-full -rotate-90" viewBox="0 0 256 256"><circle cx="128" cy="128" r="112" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="10" /><circle cx="128" cy="128" r="112" fill="none" stroke={ringColor} strokeWidth="10" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - timerProgress)} className="transition-[stroke-dashoffset,stroke] duration-500" /></svg><div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-6xl font-bold tracking-tight">{formatTimer(timer.secondsRemaining)}</span><span className="mt-2 text-xs uppercase tracking-[0.2em] text-indigo-100">{timer.isRunning ? "In focus" : "Ready"}</span></div></div><div className="mx-auto max-w-sm space-y-4"><input value={timer.sessionTitle} disabled={timer.isRunning} onChange={(event) => setTimer({ ...timer, sessionTitle: event.target.value })} className="w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-center text-sm text-white placeholder:text-indigo-200 outline-none focus:border-white/60 disabled:opacity-70" placeholder="What are you studying?" /><div className="flex flex-wrap justify-center gap-2">{[25, 45, 60].map((minutes) => <button key={minutes} type="button" onClick={() => chooseDuration(minutes)} className={cn("rounded-full border px-3 py-1.5 text-xs font-semibold", timerDuration === minutes ? "border-white bg-white text-indigo-700" : "border-white/30 text-indigo-100 hover:bg-white/10")}>{minutes} min{minutes === 25 ? " · Pomodoro" : ""}</button>)}<label className={cn("flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold", ![25, 45, 60].includes(timerDuration) ? "border-white bg-white text-indigo-700" : "border-white/30 text-indigo-100")}><input type="number" min="1" max="240" value={![25, 45, 60].includes(timerDuration) ? timerDuration : ""} onChange={(event) => chooseDuration(Math.max(1, Number(event.target.value) || 1))} className="w-10 bg-transparent text-center outline-none" placeholder="Custom" /> min</label></div><div className="flex justify-center gap-3"><Button size="lg" className="min-w-28 bg-white text-indigo-700 hover:bg-indigo-50" onClick={timer.isRunning ? pauseTimer : startTimer}>{timer.isRunning ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}{timer.isRunning ? "Pause" : "Start"}</Button><Button size="lg" variant="ghost" className="border border-white/30 text-white hover:bg-white/10" onClick={resetTimer}><RotateCcw className="mr-2 h-4 w-4" /> Reset</Button></div></div></section>
@@ -332,13 +351,113 @@ function SessionCard({ session, onStart, onToggle, onEdit, onDelete }: { session
   return <article className={cn("rounded-xl border border-slate-200 p-4 transition hover:border-indigo-200 hover:shadow-sm", session.isCompleted && "bg-slate-50")}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className={cn("truncate text-sm font-semibold", session.isCompleted ? "text-slate-400 line-through" : "text-slate-900")}>{session.title}</h3><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", getTopicColor(session.topic))}>{session.topic}</span></div><p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500"><Clock3 className="h-3.5 w-3.5" />{format(parseISO(session.scheduledDate), "EEE, MMM d · h:mm a")} · {session.durationMinutes} min</p><p className="mt-1 text-xs font-medium text-indigo-600">{session.studyType ?? "Focus Session"}</p>{session.class ? <p className="mt-1 text-xs" style={{ color: session.class.color }}>{session.class.name}</p> : null}</div><div className="flex shrink-0 gap-1"><button type="button" onClick={() => onEdit(session)} aria-label={`Edit ${session.title}`} title="Edit session" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"><Edit3 className="h-4 w-4" /></button><button type="button" onClick={() => onDelete(session)} aria-label={`Delete ${session.title}`} title="Delete session" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div></div><div className="mt-4 flex items-center justify-between gap-2"><button type="button" onClick={() => onToggle(session)} className={cn("flex h-5 w-5 items-center justify-center rounded border", session.isCompleted ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 hover:border-indigo-500")} aria-label={session.isCompleted ? "Mark session incomplete" : "Mark session complete"}>{session.isCompleted ? <Check className="h-3.5 w-3.5" /> : null}</button>{!session.isCompleted ? <Button size="sm" variant="outline" onClick={() => onStart(session)}><Play className="mr-1.5 h-3.5 w-3.5" /> Start Timer</Button> : <span className="text-xs font-medium text-emerald-600">Completed</span>}</div></article>;
 }
 
+const markdownComponents: Components = {
+  details: (props) => {
+    const { node: _node, ...rest } = props;
+    return <details {...rest} className="group my-3 rounded-xl border border-slate-200 bg-slate-50 p-3 open:bg-white [&>*:nth-child(2)]:mt-3" />;
+  },
+  summary: (props) => {
+    const { node: _node, ...rest } = props;
+    return (
+      <summary {...rest} className="cursor-pointer select-none list-none font-semibold text-indigo-700 marker:content-none [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-2">
+          <span className="text-xs transition-transform group-open:rotate-90">▶</span>
+          {props.children}
+        </span>
+      </summary>
+    );
+  },
+};
+
 function GeneratedStudyPanel({ content, regenerating, onRegenerate }: { content: GeneratedContent; regenerating: boolean; onRegenerate: () => void }) {
   return <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">AI Study Session</p><h2 className="mt-1 text-lg font-bold text-slate-900">Your study set</h2></div></div>
     <div className="prose prose-slate mt-5 max-w-none rounded-2xl border border-slate-200 bg-white p-5 prose-headings:font-bold prose-headings:text-slate-900 prose-strong:text-slate-900 prose-li:marker:text-indigo-500">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown>
+      <ReactMarkdown key={content} remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={markdownComponents}>{content}</ReactMarkdown>
     </div>
     <div className="mt-4 flex justify-center border-t border-indigo-100 pt-4"><Button variant="outline" size="sm" onClick={onRegenerate} disabled={regenerating}><RotateCcw className="mr-2 h-4 w-4" /> {regenerating ? "Generating..." : "Generate New Set"}</Button></div>
   </section>;
+}
+
+function QuizPanel({ questions, regenerating, onRegenerate, classId, topic }: { questions: QuizQuestion[]; regenerating: boolean; onRegenerate: () => void; classId: string | null; topic: string }) {
+  return (
+    <section className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">AI Study Session</p>
+          <h2 className="mt-1 text-lg font-bold text-slate-900">Quiz Me</h2>
+        </div>
+      </div>
+      <div key={JSON.stringify(questions)} className="mt-5 space-y-4">
+        {questions.map((item, index) => (
+          <QuizQuestionCard key={index} index={index} item={item} classId={classId} topic={topic} />
+        ))}
+      </div>
+      <div className="mt-4 flex justify-center border-t border-indigo-100 pt-4">
+        <Button variant="outline" size="sm" onClick={onRegenerate} disabled={regenerating}>
+          <RotateCcw className="mr-2 h-4 w-4" /> {regenerating ? "Generating..." : "Generate New Set"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function QuizQuestionCard({ index, item, classId, topic }: { index: number; item: QuizQuestion; classId: string | null; topic: string }) {
+  const { toast: showToast } = useToast();
+  const [revealed, setRevealed] = useState(false);
+  const [recorded, setRecorded] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function recordResult(isCorrect: boolean) {
+    if (saving || recorded !== null) return;
+    setSaving(true);
+    try {
+      const response = await fetch("/api/study/quiz-attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ classId, topic, question: item.question, isCorrect }),
+      });
+      if (!response.ok) throw new Error("Unable to save your answer.");
+      setRecorded(isCorrect);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Unable to save your answer.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-semibold text-slate-500">Question {index + 1}</h3>
+      <div className="prose prose-slate mt-1 max-w-none prose-p:my-1">
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{item.question}</ReactMarkdown>
+      </div>
+      {!revealed ? (
+        <button type="button" onClick={() => setRevealed(true)} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-indigo-700">
+          <span className="text-xs">▶</span> Show Answer
+        </button>
+      ) : (
+        <div className="mt-3 rounded-lg bg-slate-50 p-3">
+          <div className="prose prose-slate max-w-none prose-p:my-1">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{`**Correct answer:** ${item.answer}`}</ReactMarkdown>
+            {item.explanation ? <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{item.explanation}</ReactMarkdown> : null}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+            {recorded === null ? (
+              <>
+                <span className="text-xs font-medium text-slate-500">Did you get it right?</span>
+                <Button size="sm" onClick={() => recordResult(true)} disabled={saving}>I got it right</Button>
+                <Button size="sm" variant="outline" onClick={() => recordResult(false)} disabled={saving}>I got it wrong</Button>
+              </>
+            ) : (
+              <span className={cn("text-sm font-semibold", recorded ? "text-emerald-600" : "text-red-600")}>
+                {recorded ? "✓ Marked correct — nice work!" : "✗ Marked incorrect — we'll revisit this one."}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </article>
+  );
 }
 
 function InsightCard({ label, value }: { label: string; value: string }) {
