@@ -13,6 +13,7 @@ StudyFlow brings the essential parts of a student's academic workflow together i
 | Authentication | NextAuth.js credentials authentication |
 | Database | Prisma 7 with SQLite and better-sqlite3 |
 | Planning | date-fns for calendar and study planning calculations |
+| AI | Local models via Ollama (free), with optional Groq support |
 | Icons | lucide-react |
 
 ## Setup
@@ -46,7 +47,24 @@ npx prisma generate
 npx prisma migrate dev
 ```
 
-### 5. Start the development server
+### 5. Set up the local AI model
+
+The AI Assistant and Study Helper run on a free local model through [Ollama](https://ollama.com). Install Ollama, then download the default model (about 4.7 GB):
+
+```bash
+ollama pull llama3
+```
+
+Ollama runs in the background after installation. To use a different model, or Groq's hosted models instead, add any of these optional values to `.env.local`:
+
+```env
+OLLAMA_MODEL="llama3"              # any model from `ollama list`
+OLLAMA_URL="http://localhost:11434"
+AI_PROVIDER="groq"                 # use Groq instead of Ollama
+GROQ_API_KEY="your-key"            # required when AI_PROVIDER="groq"
+```
+
+### 6. Start the development server
 
 ```bash
 npm run dev
@@ -63,6 +81,8 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - Assignment-to-calendar synchronization with completion checkmarks and cleanup
 - Study Helper with a `localStorage`-backed focus timer and browser completion sound
 - Study session planner with optional class association and insights
+- AI Assistant chat that knows your classes, assignments, and schedule, with saved conversations and streamed replies
+- One-click demo mode with realistic sample data that resets on each demo sign-in
 - Responsive desktop sidebar and mobile icon navigation
 - Shared toast notifications, loading skeletons, empty states, and error handling
 
