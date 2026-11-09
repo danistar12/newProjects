@@ -3,6 +3,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
+import { resetDemoAccount } from "@/lib/demo";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
@@ -48,6 +49,15 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name ?? user.email,
         };
+      },
+    }),
+    // One-click demo: resets the shared demo account to fresh mock data and signs in.
+    CredentialsProvider({
+      id: "demo",
+      name: "Demo",
+      credentials: {},
+      async authorize() {
+        return resetDemoAccount();
       },
     }),
   ],

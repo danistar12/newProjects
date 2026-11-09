@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import Groq from "groq-sdk";
-
+import { complete } from "@/lib/ai";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { normalizeMathDelimiters } from "@/lib/utils";
 
 type StudyMode = "Practice Problems" | "Definitions" | "Flashcards" | "Study Guide Summary" | "Quiz Me" | "Key Concepts";
 interface QuizQuestion { question: string; answer: string; explanation: string }
@@ -64,34 +64,13 @@ function buildPrompt(className: string, studyType: Exclude<StudyMode, "Quiz Me">
 }
 
 async function generateContent(prompt: string): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    console.error("GROQ_API_KEY is not set.");
-    return FRIENDLY_ERROR_MESSAGE;
-  }
-
   try {
-    const groq = new Groq({ apiKey });
-    const result = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = result.choices[0]?.message?.content ?? "";
+    const text = await complete([{ role: "user", content: prompt }]);
     return normalizeMathDelimiters(text.trim()) || FRIENDLY_ERROR_MESSAGE;
   } catch (error) {
-    console.error("Groq generation failed:", error);
+    console.error("AI generation failed:", error);
     return FRIENDLY_ERROR_MESSAGE;
   }
-}
-
-// Some models ignore the $/$$ instruction and use LaTeX's \(\)/\[\] delimiters instead,
-// which remark-math doesn't recognize, so normalize them here regardless of what the model outputs.
-function normalizeMathDelimiters(text: string): string {
-  return text
-    .replace(/\\\[/g, "$$$$")
-    .replace(/\\\]/g, "$$$$")
-    .replace(/\\\(/g, "$")
-    .replace(/\\\)/g, "$");
 }
 
 async function getQuizHistory(userId: string, classId: string | null, topic: string) {
@@ -123,20 +102,8 @@ function buildQuizPrompt(className: string, topic: string, mastered: { question:
 }
 
 async function generateQuizQuestions(prompt: string): Promise<QuizQuestion[]> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    console.error("GROQ_API_KEY is not set.");
-    return FRIENDLY_QUIZ_ERROR;
-  }
-
   try {
-    const groq = new Groq({ apiKey });
-    const result = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-    });
-    const raw = result.choices[0]?.message?.content ?? "";
+    const raw = await complete([{ role: "user", content: prompt }], { json: true });
     const parsed = parseQuizJson(raw);
     if (!parsed) return FRIENDLY_QUIZ_ERROR;
     return parsed.map((item) => ({
@@ -145,7 +112,7 @@ async function generateQuizQuestions(prompt: string): Promise<QuizQuestion[]> {
       explanation: normalizeMathDelimiters(String(item.explanation ?? "").trim()),
     }));
   } catch (error) {
-    console.error("Groq quiz generation failed:", error);
+    console.error("AI quiz generation failed:", error);
     return FRIENDLY_QUIZ_ERROR;
   }
 }

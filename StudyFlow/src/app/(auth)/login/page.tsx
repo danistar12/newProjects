@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { BookOpenText } from "lucide-react";
+import { BookOpenText, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -37,6 +38,22 @@ export default function LoginPage() {
     }
 
     router.push(callbackUrl);
+    router.refresh();
+  }
+
+  async function handleDemo() {
+    setError("");
+    setIsDemoLoading(true);
+
+    const result = await signIn("demo", { redirect: false });
+
+    if (result?.error) {
+      setIsDemoLoading(false);
+      setError("Unable to start the demo. Please try again.");
+      return;
+    }
+
+    router.push("/dashboard");
     router.refresh();
   }
 
@@ -96,12 +113,29 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isDemoLoading}
             className="flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 font-medium text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-indigo-400"
           >
             {isLoading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+
+        <div className="my-5 flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-slate-400">
+          <span className="h-px flex-1 bg-slate-200" />
+          or
+          <span className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleDemo}
+          disabled={isLoading || isDemoLoading}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Sparkles className="h-4 w-4" />
+          {isDemoLoading ? "Setting up demo..." : "Explore the demo"}
+        </button>
+        <p className="mt-2 text-center text-xs text-slate-500">No account needed. Sample data resets each time.</p>
 
         <p className="mt-5 text-center text-sm text-slate-600">
           Need an account?{" "}

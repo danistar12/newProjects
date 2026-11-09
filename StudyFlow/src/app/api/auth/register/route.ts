@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
+import { isDemoEmail } from "@/lib/demo-account";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
@@ -25,6 +26,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, message: "Email is required." },
         { status: 400 },
+      );
+    }
+
+    if (isDemoEmail(normalizedEmail)) {
+      return NextResponse.json(
+        { success: false, message: "This email is reserved for the demo account." },
+        { status: 409 },
       );
     }
 

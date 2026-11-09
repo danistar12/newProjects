@@ -11,6 +11,7 @@ import {
   CalendarDays,
   LayoutDashboard,
   Menu,
+  MessageSquareText,
   X,
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const navItems: NavItem[] = [
   { label: "Calendar", href: "/calendar", icon: CalendarDays },
   { label: "Classes", href: "/classes", icon: BookMarked },
   { label: "Study Helper", href: "/study", icon: Brain },
+  { label: "AI Assistant", href: "/chat", icon: MessageSquareText },
 ];
 
 export default function Sidebar() {
@@ -122,7 +124,7 @@ export default function Sidebar() {
         {sidebarContent}
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-slate-200 bg-white/95 p-2 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden" aria-label="Mobile navigation">
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white/95 p-2 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden" aria-label="Mobile navigation">
         {navItems.map(({ label, href, icon: Icon }) => {
           const isActive = pathname === href || pathname.startsWith(`${href}/`);
           return <Link key={href} href={href} aria-label={label} title={label} className={cn("flex min-h-12 items-center justify-center rounded-xl", isActive ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100")}><Icon className="h-5 w-5" /></Link>;

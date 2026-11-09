@@ -6,7 +6,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const publicPaths = ["/login", "/register", "/api/auth"];
-  const protectedPrefixes = ["/dashboard", "/calendar", "/classes", "/study"];
+  const protectedPrefixes = ["/dashboard", "/calendar", "/classes", "/study", "/chat"];
 
   const isPublicPath = publicPaths.some((path) =>
     pathname === path || pathname.startsWith(`${path}/`),
@@ -41,6 +41,7 @@ export const config = {
     "/calendar/:path*",
     "/classes/:path*",
     "/study/:path*",
+    "/chat/:path*",
     "/login",
     "/register",
     "/api/auth/:path*",
